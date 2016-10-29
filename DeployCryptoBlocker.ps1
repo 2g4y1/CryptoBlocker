@@ -1,36 +1,38 @@
 ﻿# DeployCryptoBlocker.ps1
 #
 ################################ Notification Options ################################
-$Script = New-Object psobject
-$Script | Add-Member -NotePropertyName "Directory" -NotePropertyValue "C:\FSRMScripts" #Modify this the first time you run it
-$Script | Add-Member -NotePropertyName "EmailRecipient" -NotePropertyValue "email@domain.com" #Modify this the first time you run it - will be TO in Email
-$Script | Add-Member -NotePropertyName "EmailSender" -NotePropertyValue "email@domain.com" #Modify this the first time you run it - will be FROM in Email
-#Make sure you've set your SMTP server in FSRM as well
+$DCB = New-Object psobject
+$DCB | Add-Member -NotePropertyName "Directory" -NotePropertyValue "C:\FSRMScripts" #Modify this the first time you run it
+$DCB | Add-Member -NotePropertyName "EmailRecipient" -NotePropertyValue "email@domain.com" #Modify this the first time you run it - will be TO in Email - Comma separated
+$DCB | Add-Member -NotePropertyName "EmailSender" -NotePropertyValue "email@domain.com" #Modify this the first time you run it - will be FROM in Email
+$DCB | Add-Member -NotePropertyName "SMTPServer" -NotePropertyValue "FQDN.domain.com" #Modify this the first time you run it - change to your SMTP server
+$DCB | Add-Member -NotePropertyName "SMTPMailFrom" -NotePropertyValue "email@domain.com" #Generic SMTP Sender
+$DCB | Add-Member -NotePropertyName "SMTPMailRecipients" -NotePropertyValue "email@domain.com" #Generic SMTP Recipients - Comma separated
 
 if(!(Test-Path $PSScriptRoot)){#Create Directory if there is no current directory
-    New-Item -ItemType Directory -Path $Script.Directory
-} else { $Script.Directory = $PSScriptRoot } 
+    New-Item -ItemType Directory -Path $DCB.Directory
+} else { $DCB.Directory = $PSScriptRoot } 
 
-$Script | Add-Member -NotePropertyName "EventNotification" -NotePropertyValue "$($Script.Directory)\EventNotification.txt"
-$Script | Add-Member -NotePropertyName "EmailNotification" -NotePropertyValue "$($Script.Directory)\EmailNotification.txt"
-$Script | Add-Member -NotePropertyName "Script" -NotePropertyValue "$($Script.Directory)\DeployCryptoBlocker.ps1"
-$Script | Add-Member -NotePropertyName "TaskName" -NotePropertyValue "FSRM DeployCryptoBlocker Updater"
+$DCB | Add-Member -NotePropertyName "EventNotification" -NotePropertyValue "$($DCB.Directory)\EventNotification.txt"
+$DCB | Add-Member -NotePropertyName "EmailNotification" -NotePropertyValue "$($DCB.Directory)\EmailNotification.txt"
+$DCB | Add-Member -NotePropertyName "Script" -NotePropertyValue "$($DCB.Directory)\DeployCryptoBlocker.ps1"
+$DCB | Add-Member -NotePropertyName "TaskName" -NotePropertyValue "FSRM DeployCryptoBlocker Updater"
 
-if(!(Test-Path $Script.EventNotification)){#Create the Event Notification template
-    New-Item -ItemType File -Path $Script.EventNotification
+if(!(Test-Path $DCB.EventNotification)){#Create the Event Notification template
+    New-Item -ItemType File -Path $DCB.EventNotification
 }
 $EventNote = 'Notification=e','RunLimitInterval=5','EventType=Warning','Message=User [Source Io Owner] attempted to save [Source File Path] to [File Screen Path] on the [Server] server. This file is in the [Violated File Group] file group, which is not permitted on the server.'
-Add-Content -Value $EventNote -Path $Script.EventNotification -Force
+Add-Content -Value $EventNote -Path $DCB.EventNotification -Force
 
-if(!(Test-Path $Script.EmailNotification)){#Create the Email Notification template
-    New-Item -ItemType File -Path $Script.EmailNotification
+if(!(Test-Path $DCB.EmailNotification)){#Create the Email Notification template
+    New-Item -ItemType File -Path $DCB.EmailNotification
 } else { #If the file exists, get email addresses from the file
-    $OldEmailNotification = get-content $script.EmailNotification
-    $script.EmailRecipient = $OldEmailNotification[2].Substring(3)
-    $Script.EmailSender = $OldEmailNotification[3].Substring(5)
+    $OldEmailNotification = get-content $DCB.EmailNotification
+    $DCB.EmailRecipient = $OldEmailNotification[2].Substring(3)
+    $DCB.EmailSender = $OldEmailNotification[3].Substring(5)
 }
-$EmailNote = "Notification=m","RunLimitInterval=5","To=$($Script.EmailRecipient)","From=$($Script.EmailSender)","Subject=Unauthorized file from the [Violated File Group] file group detected","Message=User [Source Io Owner] attempted to save [Source File Path] to [File Screen Path] on the [Server] server. This file is in the [Violated File Group] file group, which is not permitted on the server."
-Add-Content -Value $EmailNote -PassThru $Script.EmailNotification -Force
+$EmailNote = "Notification=m","RunLimitInterval=5","To=$($DCB.EmailRecipient)","From=$($DCB.EmailSender)","Subject=Cryptowatch: Unauthorized file from the [Violated File Group] file group detected","Message=User [Source Io Owner] attempted to save [Source File Path] to [File Screen Path] on the [Server] server. This file is in the [Violated File Group] file group, which is not permitted on the server."
+Add-Content -Value $EmailNote -PassThru $DCB.EmailNotification -Force
 
 ################################ Functions ################################
 
@@ -131,6 +133,22 @@ else
     return
 }
 
+#Make sure you've set your SMTP server in FSRM as well
+$FSRM = &filescrn admin options
+if($FSRM[2].Substring(32).length -ge 8 -and $FSRM[2].Trim().substring(0,8) -like "SMTP Ser"){ #If the SMTP server has something in it
+    $DCB.SMTPServer = $FSRM[2].Substring(32)
+} 
+if($FSRM[3].Substring(32).length -ge 4 -and $FSRM[3].trim().substring(0,8) -like "Mail Fro"){ #If the Mail From has anything
+    $DCB.SMTPMailFrom = $FSRM[3].Substring(32)
+}
+if($FSRM[4].substring(32).length -ge 4 -and $FSRM[4].trim().substring(0,8) -like "Admin E-"){ #if the admin email has anything
+    $DCB.SMTPMailRecipients = $FSRM[4].Substring(32)
+}
+
+&filescrn admin options /smtp:$($DCB.SMTPServer) /from:$($DCB.SMTPMailFrom) /AdminEmails:$($DCB.SMTPMailRecipients)
+
+
+
 $fileGroupName = "CryptoBlockerGroup"
 $fileTemplateName = "CryptoBlockerTemplate"
 $fileScreenName = "CryptoBlockerScreen"
@@ -141,29 +159,29 @@ $RawScript = $webClient.DownloadString("https://raw.githubusercontent.com/nexxai
 $monitoredExtensions = @(ConvertFrom-Json20($jsonStr) | % { $_.filters })
 
 
-if(!($Script.Script)){ #Save the script if it doesn't exist
-    New-Item -ItemType File -Path $Script.Script
-    Add-Content -Value $RawScript -Path $Script.Script -Force
-} elseif(!((Get-content $Script.Script) -eq $RawScript)){ #Otherwise update it if it's different
-    Add-Content -Value $RawScript -Path $Script.Script -Force
+if(!($DCB.Script)){ #Save the script if it doesn't exist
+    New-Item -ItemType File -Path $DCB.Script
+    Add-Content -Value $RawScript -Path $DCB.Script -Force
+} elseif(!((Get-content $DCB.Script) -eq $RawScript)){ #Otherwise update it if it's different
+    Add-Content -Value $RawScript -Path $DCB.Script -Force
 } else {}
 
 #Create task event that will run the saved script Daily at 4AM -- but only if the update of DeployCryptoBlocker was successful
-$TaskExists = Get-ScheduledTask | Where-Object {$_.Taskname -like $Script.TaskName}
+$TaskExists = Get-ScheduledTask | Where-Object {$_.Taskname -like $DCB.TaskName}
 if($TaskExists){
-    Unregister-ScheduledTask -TaskName $script.TaskName #Remove task 
-    $TaskAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-noprofile -file `"$($Script.Script)`""
+    Unregister-ScheduledTask -TaskName $DCB.TaskName #Remove task 
+    $TaskAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-noprofile -file `"$($DCB.Script)`""
     $TaskTrigger = New-ScheduledTaskTrigger -At "4:00AM" -Daily
     $TaskPrincipal = New-ScheduledTaskPrincipal -UserId "LOCALSERVICE" -RunLevel Highest -LogonType ServiceAccount
     $Task = New-ScheduledTask -Action $TaskAction -Principal $TaskPrincipal -Trigger $TaskTrigger -Description "This updates the File System Resource Monitor file screen group for anti-cryptoware screening."
-    Register-ScheduledTask $Script.TaskName -InputObject $Task
+    Register-ScheduledTask $DCB.TaskName -InputObject $Task
 } else {
-    if(!((Get-content $Script.Script) -eq $RawScript)){#Only update task if script has changed
-        $TaskAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-noprofile -file `"$($Script.Script)`""
+    if(!((Get-content $DCB.Script) -eq $RawScript)){#Only update task if script has changed
+        $TaskAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-noprofile -file `"$($DCB.Script)`""
         $TaskTrigger = New-ScheduledTaskTrigger -At "4:00AM" -Daily
         $TaskPrincipal = New-ScheduledTaskPrincipal -UserId "LOCALSERVICE" -RunLevel Highest -LogonType ServiceAccount
         $Task = New-ScheduledTask -Action $TaskAction -Principal $TaskPrincipal -Trigger $TaskTrigger -Description "This updates the File System Resource Monitor file screen group for anti-cryptoware screening."
-        Register-ScheduledTask $Script.TaskName -InputObject $Task
+        Register-ScheduledTask $DCB.TaskName -InputObject $Task
     }
 }
 
@@ -183,7 +201,7 @@ ForEach ($group in $fileGroups) {
 Write-Host "Adding/replacing File Screen Template [$fileTemplateName] with Event Notification [$eventConfFilename] and Command Notification [$cmdConfFilename].."
 &filescrn.exe Template Delete /Template:$fileTemplateName /Quiet
 # Build the argument list with all required fileGroups
-$screenArgs = 'Template','Add',"/Template:$fileTemplateName","/Add-Notification:E,$($Script.EventNotification)","/Add-Notification:M,$($Script.EmailNotification)" 
+$screenArgs = 'Template','Add',"/Template:$fileTemplateName","/Add-Notification:E,$($DCB.EventNotification)","/Add-Notification:M,$($DCB.EmailNotification)" 
 ForEach ($group in $fileGroups) {
     $screenArgs += "/Add-Filegroup:$($group.fileGroupName)"
 }
