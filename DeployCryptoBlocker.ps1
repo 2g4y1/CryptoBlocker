@@ -136,3 +136,4 @@ $drivesContainingShares | % {
     &filescrn.exe Screen Delete "/Path:$_" /Quiet
     &filescrn.exe Screen Add "/Path:$_" "/SourceTemplate:$fileTemplateName"
 }
+
