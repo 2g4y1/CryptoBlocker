@@ -207,7 +207,7 @@ if(!($DCB.Script)){ #Save the currently running script in the DCB folder
 } else {}
 
 
-$DCBUpdateScript = @{
+$DCBUpdateScript = {
     $DCB = Import-Csv -Path "$($DCB.Directory)\DCBConfig.txt" -Delimiter "`t"
     function ConvertFrom-Json20([Object] $obj)
     {
@@ -299,10 +299,10 @@ $DCBUpdateScript = @{
 }
 if(!($DCB.TaskScript)){ #Save the task script in the DCB folder
     New-Item -ItemType File -Path $DCB.TaskScript
-    Add-Content -Value $RawScript -Path $DCB.TaskScript -Force
+    Add-Content -Value $DCBUpdateScript -Path $DCB.TaskScript -Force
 }
 else{
-    Add-Content -Value $RawScript -Path $DCB.TaskScript -Force
+    Add-Content -Value $DCBUpdateScript -Path $DCB.TaskScript -Force
 }
 
 #Create task event that will run the saved script Daily at 4AM -- but only if the update of DeployCryptoBlocker was successful
